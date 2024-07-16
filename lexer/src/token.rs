@@ -1,11 +1,11 @@
 #[derive(Debug)]
 pub struct Token {
-    line: u32,
-    column: u32,
-    token_type: TokenType,
+    pub line: u32,
+    pub column: u32,
+    pub token_type: TokenType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenType {
     Identifier(String),
     String(String),
@@ -28,7 +28,7 @@ pub enum TokenType {
     Star,
 
     Bang,
-    NotEquals,
+    BangEqual,
     Equals,
     DoubleEquals,
     GreaterThan,
