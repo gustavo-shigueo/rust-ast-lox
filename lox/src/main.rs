@@ -1,6 +1,8 @@
 use clap::Parser;
 use color_eyre::{owo_colors::OwoColorize, Result};
-use std::path::Path;
+use std::{io::Write, path::Path};
+
+use lexer::Scanner;
 
 #[derive(Parser)]
 struct Args {
@@ -25,11 +27,12 @@ fn run_file(path: &Path) -> Result<()> {
 }
 
 fn run_prompt() -> Result<()> {
+    let mut stdout = std::io::stdout();
     let stdin = std::io::stdin();
     let mut buffer = String::new();
 
     loop {
-        print!("> ");
+        _ = stdout.write_all(b"> ");
         buffer.clear();
         stdin.read_line(&mut buffer)?;
 
@@ -42,6 +45,17 @@ fn run_prompt() -> Result<()> {
 }
 
 fn run(source: &str) -> Result<()> {
+    let scanner = Scanner::new(source);
+    match scanner.scan() {
+        Ok(tokens) => {
+            dbg!(tokens);
+        }
+        Err(errors) => {
+            for error in errors {
+                eprintln!("{}", error)
+            }
+        }
+    }
     Ok(())
 }
 
