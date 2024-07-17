@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::{
     token::{Token, TokenType},
-    Error, Result,
+    Error, ErrorType, Result,
 };
 
 #[derive(Debug)]
@@ -131,7 +131,11 @@ impl<'a> Scanner<'a> {
                 }
 
                 if self.is_done() {
-                    return Err(Error::UnterminatedString(line, column));
+                    return Err(Error {
+                        line,
+                        column,
+                        source: ErrorType::UnterminatedString,
+                    });
                 }
 
                 self.advance();
@@ -152,7 +156,7 @@ impl<'a> Scanner<'a> {
                 }
 
                 if self.chars.peek().is_some_and(|&x| x == '.')
-                    && self.peek_next().is_some_and(|x| matches!(x, '0'..='9'))
+                    && self.peek_next().is_some_and(|x| x.is_ascii_digit())
                 {
                     self.advance();
 
@@ -211,7 +215,13 @@ impl<'a> Scanner<'a> {
                 self.column = 0;
                 return Ok(None);
             }
-            x => return Err(Error::UnexpectedCharacter(x, self.line, self.column - 1)),
+            x => {
+                return Err(Error {
+                    line: self.line,
+                    column: self.column - 1,
+                    source: ErrorType::UnexpectedCharacter(x),
+                })
+            }
         }))
     }
 

@@ -2,7 +2,7 @@ use clap::Parser;
 use color_eyre::{owo_colors::OwoColorize, Result};
 use std::{io::Write, path::Path};
 
-use lexer::Scanner;
+use lexer::{Error, Scanner};
 
 #[derive(Parser)]
 struct Args {
@@ -33,6 +33,7 @@ fn run_prompt() -> Result<()> {
 
     loop {
         _ = stdout.write_all(b"> ");
+        _ = stdout.flush();
         buffer.clear();
         stdin.read_line(&mut buffer)?;
 
@@ -52,23 +53,24 @@ fn run(source: &str) -> Result<()> {
         }
         Err(errors) => {
             for error in errors {
-                eprintln!("{}", error)
+                report(source, error)
             }
         }
     }
     Ok(())
 }
 
-fn report(line: u32, column: u32, code: &str, message: &str) {
-    println!("{}: {}", "Error".red().bold(), message);
+fn report(source: &str, error: Error) {
+    eprintln!("{}: {}", "Error".red().bold(), error.source);
 
-    println!("  line: {line}");
-    println!("  column: {column}");
+    eprintln!("  line: {}", error.line);
+    eprintln!("  column: {}", error.column);
 
-    println!("{code}");
-    for _ in 0..column {
-        print!(" ")
+    let code = source.lines().nth(error.line as usize).unwrap_or_default();
+    eprintln!("{code}");
+    for _ in 0..error.column {
+        eprint!(" ")
     }
 
-    print!("^--- Here")
+    eprintln!("^--- Here")
 }
