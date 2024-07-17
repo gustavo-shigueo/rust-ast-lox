@@ -1,3 +1,6 @@
+#![deny(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::module_name_repetitions)]
+
 mod error;
 pub mod scanner;
 mod token;

@@ -2,11 +2,11 @@
 pub struct Token {
     pub line: u32,
     pub column: u32,
-    pub token_type: TokenType,
+    pub kind: TokenKind,
 }
 
 #[derive(Debug, Clone)]
-pub enum TokenType {
+pub enum TokenKind {
     Identifier(String),
     String(String),
     Number(f64),

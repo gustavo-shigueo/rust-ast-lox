@@ -1,14 +1,14 @@
-use std::{iter::Peekable, str::Chars};
+use std::{iter::Peekable, str::Bytes};
 
 use crate::{
-    token::{Token, TokenType},
+    token::{Token, TokenKind},
     Error, ErrorType, Result,
 };
 
 #[derive(Debug)]
 pub struct Scanner<'a> {
     source: &'a str,
-    chars: Peekable<Chars<'a>>,
+    bytes: Peekable<Bytes<'a>>,
     line: u32,
     column: u32,
     current: usize,
@@ -18,10 +18,11 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
+    #[must_use]
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
-            chars: source.chars().peekable(),
+            bytes: source.bytes().peekable(),
             line: 0,
             column: 0,
             current: 0,
@@ -31,8 +32,14 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    /// This function will consume all the characters in the source code
+    /// and returns a collection of tokens
+    ///
+    /// # Errors
+    /// If there is an unexpected character or an unterminated string,
+    /// a collection will be returned containing all errors found
     pub fn scan(mut self) -> Result<Vec<Token>, Vec<Error>> {
-        while !self.is_done() {
+        while self.peek().is_some() {
             self.lexeme_start = self.current;
 
             match self.scan_token() {
@@ -42,6 +49,12 @@ impl<'a> Scanner<'a> {
             }
         }
 
+        self.tokens.push(Token {
+            line: self.line,
+            column: self.column - 1,
+            kind: TokenKind::Eof,
+        });
+
         if self.errors.is_empty() {
             Ok(self.tokens)
         } else {
@@ -50,167 +63,65 @@ impl<'a> Scanner<'a> {
     }
 
     fn scan_token(&mut self) -> Result<Option<Token>> {
-        let character = self.advance();
+        let character = self.next();
 
         Ok(Some(match character {
-            token @ ('(' | ')' | '[' | ']' | '{' | '}' | ';' | ',' | '.' | '-' | '+' | '*') => {
-                Token {
-                    line: self.line,
-                    column: self.column - 1,
-                    token_type: match token {
-                        '(' => TokenType::LeftParen,
-                        ')' => TokenType::RightParen,
-                        '[' => TokenType::LeftBracket,
-                        ']' => TokenType::RightBracket,
-                        '{' => TokenType::LeftCurly,
-                        '}' => TokenType::RightCurly,
-                        ';' => TokenType::Semicolon,
-                        ',' => TokenType::Comma,
-                        '.' => TokenType::Dot,
-                        '+' => TokenType::Plus,
-                        '-' => TokenType::Minus,
-                        '*' => TokenType::Star,
-                        _ => unreachable!(),
-                    },
-                }
-            }
-            character @ ('<' | '>' | '!' | '=') => {
-                let is_followed_by_equal = self.match_next('=');
+            token @ (b'(' | b')' | b'[' | b']' | b'{' | b'}' | b';' | b',' | b'.' | b'-' | b'+'
+            | b'*') => Token {
+                line: self.line,
+                column: self.column - 1,
+                kind: match token {
+                    b'(' => TokenKind::LeftParen,
+                    b')' => TokenKind::RightParen,
+                    b'[' => TokenKind::LeftBracket,
+                    b']' => TokenKind::RightBracket,
+                    b'{' => TokenKind::LeftCurly,
+                    b'}' => TokenKind::RightCurly,
+                    b';' => TokenKind::Semicolon,
+                    b',' => TokenKind::Comma,
+                    b'.' => TokenKind::Dot,
+                    b'+' => TokenKind::Plus,
+                    b'-' => TokenKind::Minus,
+                    b'*' => TokenKind::Star,
+                    _ => unreachable!(),
+                },
+            },
+            character @ (b'<' | b'>' | b'!' | b'=') => {
+                let is_followed_by_equal = self.match_next(b'=');
 
                 Token {
                     line: self.line,
                     column: self.column - 1,
-                    token_type: match character {
-                        '<' if is_followed_by_equal => TokenType::LessEqual,
-                        '<' => TokenType::LessThan,
-                        '>' if is_followed_by_equal => TokenType::GreaterEqual,
-                        '>' => TokenType::GreaterThan,
-                        '!' if is_followed_by_equal => TokenType::BangEqual,
-                        '!' => TokenType::Bang,
-                        '=' if is_followed_by_equal => TokenType::DoubleEquals,
-                        '=' => TokenType::Equals,
+                    kind: match character {
+                        b'<' if is_followed_by_equal => TokenKind::LessEqual,
+                        b'<' => TokenKind::LessThan,
+                        b'>' if is_followed_by_equal => TokenKind::GreaterEqual,
+                        b'>' => TokenKind::GreaterThan,
+                        b'!' if is_followed_by_equal => TokenKind::BangEqual,
+                        b'!' => TokenKind::Bang,
+                        b'=' if is_followed_by_equal => TokenKind::DoubleEquals,
+                        b'=' => TokenKind::Equals,
                         _ => unreachable!(),
                     },
                 }
             }
-            '/' => {
-                if self.match_next('/') {
-                    while let Some(&x) = self.chars.peek() {
-                        if x != '\n' {
-                            self.advance();
-                        } else {
-                            self.column = 0;
-                            self.line += 1;
-                            break;
-                        }
-                    }
+            b'/' => {
+                if self.match_next(b'/') {
+                    self.scan_comment();
                     return Ok(None);
-                } else {
-                    Token {
-                        line: self.line,
-                        column: self.column - 1,
-                        token_type: TokenType::Slash,
-                    }
-                }
-            }
-            '"' => {
-                let line = self.line;
-                let column = self.column - 1;
-
-                while let Some(&c) = self.chars.peek() {
-                    if c == '"' || self.is_done() {
-                        break;
-                    }
-
-                    if c == '\n' {
-                        self.line += 1;
-                        self.column = 0;
-                    }
-
-                    self.advance();
-                }
-
-                if self.is_done() {
-                    return Err(Error {
-                        line,
-                        column,
-                        source: ErrorType::UnterminatedString,
-                    });
-                }
-
-                self.advance();
-
-                let value = &self.source[self.lexeme_start + 1..self.current - 1];
-                Token {
-                    line,
-                    column,
-                    token_type: TokenType::String(value.to_owned()),
-                }
-            }
-            '0'..='9' => {
-                let line = self.line;
-                let column = self.column - 1;
-
-                while let Some('0'..='9') = self.chars.peek() {
-                    self.advance();
-                }
-
-                if self.chars.peek().is_some_and(|&x| x == '.')
-                    && self.peek_next().is_some_and(|x| x.is_ascii_digit())
-                {
-                    self.advance();
-
-                    while let Some('0'..='9') = self.chars.peek() {
-                        self.advance();
-                    }
                 }
 
                 Token {
-                    line,
-                    column,
-                    token_type: TokenType::Number(
-                        self.source[self.lexeme_start..self.current]
-                            .parse()
-                            .expect("Invalid numeric literal"),
-                    ),
+                    line: self.line,
+                    column: self.column - 1,
+                    kind: TokenKind::Slash,
                 }
             }
-            'a'..='z' | 'A'..='Z' | '_' => {
-                let line = self.line;
-                let column = self.column - 1;
-
-                while let Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_') = self.chars.peek() {
-                    self.advance();
-                }
-
-                let text = &self.source[self.lexeme_start..self.current];
-
-                Token {
-                    line,
-                    column,
-                    token_type: match text {
-                        "if" => TokenType::If,
-                        "else" => TokenType::Else,
-                        "for" => TokenType::For,
-                        "while" => TokenType::While,
-                        "var" => TokenType::Var,
-                        "fun" => TokenType::Fun,
-                        "return" => TokenType::Return,
-                        "class" => TokenType::Class,
-                        "this" => TokenType::This,
-                        "super" => TokenType::Super,
-                        "print" => TokenType::Print,
-                        "nil" => TokenType::Nil,
-                        "true" => TokenType::True,
-                        "false" => TokenType::False,
-                        "or" => TokenType::Or,
-                        "and" => TokenType::And,
-                        ident => TokenType::Identifier(ident.to_owned()),
-                    },
-                }
-            }
-            ' ' | '\t' | '\r' => return Ok(None),
-            '\n' => {
+            b'"' => self.scan_string_literal()?,
+            b'0'..=b'9' => self.scan_number_literal(),
+            b'a'..=b'z' | b'A'..=b'Z' | b'_' => self.scan_identifier(),
+            b' ' | b'\t' | b'\r' => return Ok(None),
+            b'\n' => {
                 self.line += 1;
                 self.column = 0;
                 return Ok(None);
@@ -219,42 +130,148 @@ impl<'a> Scanner<'a> {
                 return Err(Error {
                     line: self.line,
                     column: self.column - 1,
-                    source: ErrorType::UnexpectedCharacter(x),
+                    source: ErrorType::UnexpectedCharacter(x.into()),
                 })
             }
         }))
     }
 
-    fn match_next(&mut self, expected: char) -> bool {
-        if self.is_done() {
-            return false;
+    fn scan_comment(&mut self) {
+        while self.peek().is_some_and(|x| x != b'\n') {
+            self.next();
         }
 
-        match self.chars.peek() {
-            Some(&x) if x == expected => {
-                self.chars.next();
-                self.column += 1;
-                self.current += 1;
+        // Only increase line count if not at EOF
+        if self.peek().is_some() {
+            self.column = 0;
+            self.line += 1;
+        }
+    }
 
+    fn scan_string_literal(&mut self) -> Result<Token> {
+        let line = self.line;
+        let column = self.column - 1;
+
+        while let Some(c) = self.peek() {
+            if c == b'"' {
+                break;
+            }
+
+            if c == b'\n' {
+                self.line += 1;
+                self.column = 0;
+            }
+
+            self.next();
+        }
+
+        // Hit EOF without terminating string
+        if self.peek().is_none() {
+            return Err(Error {
+                line,
+                column,
+                source: ErrorType::UnterminatedString,
+            });
+        }
+
+        // Consume the closing double quotes
+        self.next();
+
+        let value = &self.source[self.lexeme_start + 1..self.current - 1];
+        Ok(Token {
+            line,
+            column,
+            kind: TokenKind::String(value.to_owned()),
+        })
+    }
+
+    fn scan_number_literal(&mut self) -> Token {
+        let line = self.line;
+        let column = self.column - 1;
+
+        while let Some(b'0'..=b'9') = self.peek() {
+            self.next();
+        }
+
+        if self.match_next(b'.') && self.double_peek().is_some_and(|x| x.is_ascii_digit()) {
+            self.next();
+
+            while let Some(b'0'..=b'9') = self.peek() {
+                self.next();
+            }
+        }
+
+        Token {
+            line,
+            column,
+            kind: TokenKind::Number(
+                self.source[self.lexeme_start..self.current]
+                    .parse()
+                    .expect("Invalid numeric literal"),
+            ),
+        }
+    }
+
+    fn scan_identifier(&mut self) -> Token {
+        let line = self.line;
+        let column = self.column - 1;
+
+        while let Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_') = self.peek() {
+            self.next();
+        }
+
+        let text = &self.source[self.lexeme_start..self.current];
+
+        Token {
+            line,
+            column,
+            kind: match text {
+                "if" => TokenKind::If,
+                "else" => TokenKind::Else,
+                "for" => TokenKind::For,
+                "while" => TokenKind::While,
+                "var" => TokenKind::Var,
+                "fun" => TokenKind::Fun,
+                "return" => TokenKind::Return,
+                "class" => TokenKind::Class,
+                "this" => TokenKind::This,
+                "super" => TokenKind::Super,
+                "print" => TokenKind::Print,
+                "nil" => TokenKind::Nil,
+                "true" => TokenKind::True,
+                "false" => TokenKind::False,
+                "or" => TokenKind::Or,
+                "and" => TokenKind::And,
+                ident => TokenKind::Identifier(ident.to_owned()),
+            },
+        }
+    }
+
+    /// Checks if the next character is equal to the expected value,
+    /// consuming it if it does
+    fn match_next(&mut self, expected: u8) -> bool {
+        match self.peek() {
+            Some(x) if x == expected => {
+                self.next();
                 true
             }
             _ => false,
         }
     }
 
-    fn advance(&mut self) -> char {
-        let c = self.chars.next();
+    fn next(&mut self) -> u8 {
+        let c = self.bytes.next();
         self.current += 1;
         self.column += 1;
 
         c.expect("Unexpected EOF")
     }
 
-    fn is_done(&self) -> bool {
-        self.current >= self.source.len()
+    fn peek(&mut self) -> Option<u8> {
+        self.bytes.peek().copied()
     }
 
-    fn peek_next(&self) -> Option<char> {
-        self.source.chars().nth(self.current + 1)
+    fn double_peek(&self) -> Option<u8> {
+        self.source.as_bytes().get(self.current + 1).copied()
     }
 }

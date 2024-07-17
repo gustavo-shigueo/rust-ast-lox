@@ -63,8 +63,8 @@ fn run(source: &str) -> Result<()> {
 fn report(source: &str, error: Error) {
     eprintln!("{}: {}", "Error".red().bold(), error.source);
 
-    eprintln!("  line: {}", error.line);
-    eprintln!("  column: {}", error.column);
+    eprintln!("  line: {}", error.line + 1);
+    eprintln!("  column: {}", error.column + 1);
 
     let code = source.lines().nth(error.line as usize).unwrap_or_default();
     eprintln!("{code}");
