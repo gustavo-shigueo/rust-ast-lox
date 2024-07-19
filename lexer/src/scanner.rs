@@ -17,8 +17,6 @@ pub struct Scanner<'a> {
     lexeme_start: usize,
 
     done: bool,
-    tokens: Vec<Token>,
-    errors: Vec<Error>,
 }
 
 impl<'a> Scanner<'a> {
@@ -32,38 +30,6 @@ impl<'a> Scanner<'a> {
             current: 0,
             lexeme_start: 0,
             done: false,
-            tokens: vec![],
-            errors: vec![],
-        }
-    }
-
-    /// This function will consume all the characters in the source code
-    /// and returns a collection of tokens
-    ///
-    /// # Errors
-    /// If there is an unexpected character or an unterminated string,
-    /// a collection will be returned containing all errors found
-    pub fn scan(mut self) -> Result<Vec<Token>, Vec<Error>> {
-        while self.peek().is_some() {
-            self.lexeme_start = self.current;
-
-            match self.scan_token() {
-                Ok(Some(token)) => self.tokens.push(token),
-                Ok(None) => (),
-                Err(error) => self.errors.push(error),
-            }
-        }
-
-        self.tokens.push(Token {
-            line: self.line,
-            column: self.column - 1,
-            kind: TokenKind::Eof,
-        });
-
-        if self.errors.is_empty() {
-            Ok(self.tokens)
-        } else {
-            Err(self.errors)
         }
     }
 
@@ -112,7 +78,12 @@ impl<'a> Scanner<'a> {
             }
             b'/' => {
                 if self.match_next(b'/') {
-                    self.scan_comment();
+                    self.scan_line_comment();
+                    return Ok(None);
+                }
+
+                if self.match_next(b'*') {
+                    self.scan_block_comment();
                     return Ok(None);
                 }
 
@@ -141,7 +112,7 @@ impl<'a> Scanner<'a> {
         }))
     }
 
-    fn scan_comment(&mut self) {
+    fn scan_line_comment(&mut self) {
         while self.peek().is_some_and(|x| x != b'\n') {
             self.next();
         }
@@ -150,6 +121,40 @@ impl<'a> Scanner<'a> {
         if self.peek().is_some() {
             self.column = 0;
             self.line += 1;
+        }
+    }
+
+    fn scan_block_comment(&mut self) {
+        let mut depth = 1;
+
+        while depth > 0 {
+            // EOF
+            if self.peek().is_none() {
+                return;
+            }
+
+            match self.check_block_comment_boundary() {
+                0 => {
+                    if self.next() == b'\n' {
+                        self.column = 0;
+                        self.line += 1;
+                    }
+                }
+                depth_change => {
+                    self.next();
+                    self.next();
+
+                    depth += depth_change;
+                }
+            }
+        }
+    }
+
+    fn check_block_comment_boundary(&mut self) -> i32 {
+        match (self.peek(), self.double_peek()) {
+            (Some(b'/'), Some(b'*')) => 1,
+            (Some(b'*'), Some(b'/')) => -1,
+            _ => 0,
         }
     }
 
@@ -198,7 +203,10 @@ impl<'a> Scanner<'a> {
             self.next();
         }
 
-        if self.match_next(b'.') && self.double_peek().is_some_and(|x| x.is_ascii_digit()) {
+        let has_fractional_part =
+            matches!(self.peek(), Some(b'.')) && matches!(self.double_peek(), Some(b'0'..=b'9'));
+
+        if has_fractional_part {
             self.next();
 
             while let Some(b'0'..=b'9') = self.peek() {
@@ -252,7 +260,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    /// Checks if the next character is equal to the expected value,
+    /// Checks if the next byte is equal to the expected value,
     /// consuming it if it does
     fn match_next(&mut self, expected: u8) -> bool {
         match self.peek() {
@@ -264,6 +272,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    /// Consumes the next byte
     fn next(&mut self) -> u8 {
         let c = self.bytes.next();
         self.current += 1;
@@ -303,7 +312,7 @@ impl<'a> Iterator for Scanner<'a> {
 
             match self.scan_token() {
                 Ok(Some(token)) => return Some(Ok(token)),
-                Ok(None) => (),
+                Ok(None) => continue,
                 Err(error) => return Some(Err(error)),
             }
         }
