@@ -47,16 +47,16 @@ fn run_prompt() -> Result<()> {
 
 fn run(source: &str) -> Result<()> {
     let scanner = Scanner::new(source);
-    match scanner.scan() {
-        Ok(tokens) => {
-            dbg!(tokens);
-        }
-        Err(errors) => {
-            for error in errors {
-                report(source, error)
+
+    for item in scanner {
+        match item {
+            Ok(token) => {
+                dbg!(token);
             }
+            Err(error) => report(source, error),
         }
     }
+
     Ok(())
 }
 

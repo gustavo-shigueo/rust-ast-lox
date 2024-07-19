@@ -9,10 +9,14 @@ use crate::{
 pub struct Scanner<'a> {
     source: &'a str,
     bytes: Peekable<Bytes<'a>>,
+
     line: u32,
     column: u32,
+
     current: usize,
     lexeme_start: usize,
+
+    done: bool,
     tokens: Vec<Token>,
     errors: Vec<Error>,
 }
@@ -27,6 +31,7 @@ impl<'a> Scanner<'a> {
             column: 0,
             current: 0,
             lexeme_start: 0,
+            done: false,
             tokens: vec![],
             errors: vec![],
         }
@@ -273,5 +278,34 @@ impl<'a> Scanner<'a> {
 
     fn double_peek(&self) -> Option<u8> {
         self.source.as_bytes().get(self.current + 1).copied()
+    }
+}
+
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Result<Token>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.peek().is_none() {
+                return if self.done {
+                    None
+                } else {
+                    self.done = true;
+                    Some(Ok(Token {
+                        line: self.line,
+                        column: self.column,
+                        kind: TokenKind::Eof,
+                    }))
+                };
+            }
+
+            self.lexeme_start = self.current;
+
+            match self.scan_token() {
+                Ok(Some(token)) => return Some(Ok(token)),
+                Ok(None) => (),
+                Err(error) => return Some(Err(error)),
+            }
+        }
     }
 }
