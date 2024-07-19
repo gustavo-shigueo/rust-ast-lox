@@ -2,7 +2,7 @@ use clap::Parser;
 use color_eyre::{owo_colors::OwoColorize, Result};
 use std::{io::Write, path::Path};
 
-use lexer::{Error, Scanner};
+use lexer::{Error, Lexer};
 
 #[derive(Parser)]
 struct Args {
@@ -46,7 +46,7 @@ fn run_prompt() -> Result<()> {
 }
 
 fn run(source: &str) -> Result<()> {
-    let scanner = Scanner::new(source);
+    let scanner = Lexer::new(source);
 
     for item in scanner {
         match item {
