@@ -1,22 +1,20 @@
 use std::{iter::Peekable, str::Bytes};
 
-use crate::{
-    token::{Token, TokenKind},
-    Error, ErrorType, Result,
-};
+use crate::token::{Token, TokenKind};
+use lox_core::{Error, ErrorType, Result};
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
     source: &'a str,
     bytes: Peekable<Bytes<'a>>,
 
-    line: u32,
-    column: u32,
+    line: usize,
+    column: usize,
 
     current: usize,
     lexeme_start: usize,
 
-    done: bool,
+    had_errors: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -29,8 +27,38 @@ impl<'a> Lexer<'a> {
             column: 0,
             current: 0,
             lexeme_start: 0,
-            done: false,
+            had_errors: false,
         }
+    }
+
+    #[must_use]
+    pub const fn had_errors(self) -> bool {
+        self.had_errors
+    }
+
+    pub fn scan(&mut self) -> Vec<Result<Token>> {
+        let mut output = vec![];
+
+        while self.peek().is_some() {
+            self.lexeme_start = self.current;
+
+            output.push(match self.scan_token() {
+                Ok(Some(token)) => Ok(token),
+                Ok(None) => continue,
+                Err(error) => {
+                    self.had_errors = true;
+                    Err(error)
+                }
+            });
+        }
+
+        output.push(Ok(Token {
+            line: self.line,
+            column: self.column,
+            kind: TokenKind::Eof,
+        }));
+
+        output
     }
 
     fn scan_token(&mut self) -> Result<Option<Token>> {
@@ -38,7 +66,7 @@ impl<'a> Lexer<'a> {
 
         Ok(Some(match character {
             token @ (b'(' | b')' | b'[' | b']' | b'{' | b'}' | b';' | b',' | b'.' | b'-' | b'+'
-            | b'*') => Token {
+            | b'?' | b':' | b'*') => Token {
                 line: self.line,
                 column: self.column - 1,
                 kind: match token {
@@ -54,6 +82,8 @@ impl<'a> Lexer<'a> {
                     b'+' => TokenKind::Plus,
                     b'-' => TokenKind::Minus,
                     b'*' => TokenKind::Star,
+                    b'?' => TokenKind::QuestionMark,
+                    b':' => TokenKind::Colon,
                     _ => unreachable!(),
                 },
             },
@@ -103,11 +133,12 @@ impl<'a> Lexer<'a> {
                 return Ok(None);
             }
             x => {
+                self.had_errors = true;
                 return Err(Error {
                     line: self.line,
                     column: self.column - 1,
                     source: ErrorType::UnexpectedCharacter(x.into()),
-                })
+                });
             }
         }))
     }
@@ -177,6 +208,7 @@ impl<'a> Lexer<'a> {
 
         // Hit EOF without terminating string
         if self.peek().is_none() {
+            self.had_errors = true;
             return Err(Error {
                 line,
                 column,
@@ -191,7 +223,7 @@ impl<'a> Lexer<'a> {
         Ok(Token {
             line,
             column,
-            kind: TokenKind::String(value.to_owned()),
+            kind: TokenKind::String(value.into()),
         })
     }
 
@@ -217,11 +249,12 @@ impl<'a> Lexer<'a> {
         Token {
             line,
             column,
-            kind: TokenKind::Number(
-                self.source[self.lexeme_start..self.current]
+            kind: TokenKind::Number {
+                value: self.source[self.lexeme_start..self.current]
                     .parse()
                     .expect("Invalid numeric literal"),
-            ),
+                lexeme: self.source[self.lexeme_start..self.current].into(),
+            },
         }
     }
 
@@ -255,7 +288,7 @@ impl<'a> Lexer<'a> {
                 "false" => TokenKind::False,
                 "or" => TokenKind::Or,
                 "and" => TokenKind::And,
-                ident => TokenKind::Identifier(ident.to_owned()),
+                ident => TokenKind::Identifier(ident.into()),
             },
         }
     }
@@ -287,34 +320,5 @@ impl<'a> Lexer<'a> {
 
     fn double_peek(&self) -> Option<u8> {
         self.source.as_bytes().get(self.current + 1).copied()
-    }
-}
-
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<Token>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if self.peek().is_none() {
-                return if self.done {
-                    None
-                } else {
-                    self.done = true;
-                    Some(Ok(Token {
-                        line: self.line,
-                        column: self.column,
-                        kind: TokenKind::Eof,
-                    }))
-                };
-            }
-
-            self.lexeme_start = self.current;
-
-            match self.scan_token() {
-                Ok(Some(token)) => return Some(Ok(token)),
-                Ok(None) => continue,
-                Err(error) => return Some(Err(error)),
-            }
-        }
     }
 }
