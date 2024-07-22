@@ -1,3 +1,3 @@
 [workspace]
-members = ["lexer", "lox", "parser"]
+members = ["core", "lexer", "lox", "parser"]
 resolver = "2"

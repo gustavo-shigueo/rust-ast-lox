@@ -2,8 +2,8 @@ use thiserror::Error as ErrorTrait;
 
 #[derive(Debug, ErrorTrait)]
 pub struct Error {
-    pub line: u32,
-    pub column: u32,
+    pub line: usize,
+    pub column: usize,
 
     #[source]
     pub source: ErrorType,
@@ -17,8 +17,18 @@ impl std::fmt::Display for Error {
 
 #[derive(Debug, ErrorTrait)]
 pub enum ErrorType {
-    #[error("Unterminated string.")]
+    #[error("Unterminated string")]
     UnterminatedString,
-    #[error(r#"Unexpected character "{0}"."#)]
+
+    #[error(r#"Unexpected character "{0}""#)]
     UnexpectedCharacter(char),
+
+    #[error(r#"Expected ")" after expression"#)]
+    UnclosedParen,
+
+    #[error("Expected expression")]
+    ExpectedExpression,
+
+    #[error(r#"Expected ":" in ternary expression"#)]
+    UnterminatedTernary,
 }

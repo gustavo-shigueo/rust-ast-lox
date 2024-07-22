@@ -210,6 +210,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 name = "lexer"
 version = "0.1.0"
 dependencies = [
+ "lox_core",
  "thiserror",
 ]
 
@@ -226,7 +227,16 @@ dependencies = [
  "clap",
  "color-eyre",
  "lexer",
+ "lox_core",
  "parser",
+]
+
+[[package]]
+name = "lox_core"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "thiserror",
 ]
 
 [[package]]
@@ -268,6 +278,10 @@ checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 [[package]]
 name = "parser"
 version = "0.1.0"
+dependencies = [
+ "lexer",
+ "lox_core",
+]
 
 [[package]]
 name = "pin-project-lite"
