@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+lox_core = { path = "../core", version = "0.1" }
 lexer = { path = "../lexer", version = "0.1" }
 parser = { path = "../parser", version = "0.1" }
 clap = { version = "4", features = ["derive"] }

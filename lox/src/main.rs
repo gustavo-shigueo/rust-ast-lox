@@ -1,8 +1,10 @@
 use clap::Parser;
-use color_eyre::{owo_colors::OwoColorize, Result};
+use color_eyre::Result;
+use parser::Parser as LoxParser;
 use std::{io::Write, path::Path};
 
-use lexer::{Error, Lexer};
+use lexer::Lexer;
+use lox_core::report;
 
 #[derive(Parser)]
 struct Args {
@@ -23,7 +25,8 @@ fn main() -> Result<()> {
 
 fn run_file(path: &Path) -> Result<()> {
     let source = std::fs::read_to_string(path)?;
-    run(&source)
+    run(&source);
+    Ok(())
 }
 
 fn run_prompt() -> Result<()> {
@@ -41,36 +44,30 @@ fn run_prompt() -> Result<()> {
             return Ok(());
         }
 
-        run(&buffer)?;
+        run(&buffer);
     }
 }
 
-fn run(source: &str) -> Result<()> {
-    let scanner = Lexer::new(source);
+fn run(source: &str) {
+    let mut lexer = Lexer::new(source);
+    let output: Vec<_> = lexer.scan();
 
-    for item in scanner {
-        match item {
-            Ok(token) => {
-                dbg!(token);
+    if lexer.had_errors() {
+        for item in output.iter() {
+            match item {
+                Err(ref error) => report(source, error),
+                Ok(_) => continue,
             }
-            Err(error) => report(source, error),
         }
+
+        return;
     }
 
-    Ok(())
-}
+    let tokens: Vec<_> = output.into_iter().filter_map(|x| x.ok()).collect();
 
-fn report(source: &str, error: Error) {
-    eprintln!("{}: {}", "Error".red().bold(), error.source);
-
-    eprintln!("  line: {}", error.line + 1);
-    eprintln!("  column: {}", error.column + 1);
-
-    let code = source.lines().nth(error.line as usize).unwrap_or_default();
-    eprintln!("{code}");
-    for _ in 0..error.column {
-        eprint!(" ")
+    let mut parser = LoxParser::new(source, &tokens);
+    match parser.parse() {
+        Ok(ast) => println!("{}", dbg!(ast)),
+        Err(ref error) => report(source, error),
     }
-
-    eprintln!("^--- Here")
 }
