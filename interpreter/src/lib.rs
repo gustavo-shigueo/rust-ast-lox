@@ -1,14 +1,14 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+#![deny(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::module_name_repetitions)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod callable;
+mod environment;
+mod error;
+mod interpreter;
+mod value;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use callable::{Callable, CallableKind};
+pub use environment::Environment;
+pub use error::RuntimeError;
+pub use interpreter::Interpreter;
+pub use value::Value;
