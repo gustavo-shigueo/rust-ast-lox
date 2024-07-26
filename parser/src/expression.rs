@@ -1,125 +1,94 @@
+use crate::{BinaryOperator, Literal, LogicalOperator, Statement, UnaryOperator};
 use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum Expression {
-    TernaryExpression {
+    Ternary {
         condition: Box<Expression>,
         truthy: Box<Expression>,
-        falsy: Box<Expression>,
+        falsey: Box<Expression>,
     },
-    BinaryExpression {
+    Binary {
         left: Box<Expression>,
         right: Box<Expression>,
         operator: BinaryOperator,
     },
-    UnaryExpression {
+    Logical {
+        left: Box<Expression>,
+        right: Box<Expression>,
+        operator: LogicalOperator,
+    },
+    Unary {
         expression: Box<Expression>,
         operator: UnaryOperator,
     },
     GroupingExpression(Box<Expression>),
     Literal(Literal),
-}
-
-#[derive(Debug)]
-pub enum BinaryOperator {
-    Plus,
-    Minus,
-    Star,
-    Slash,
-
-    BangEqual,
-    DoubleEquals,
-    GreaterThan,
-    GreaterEqual,
-    LessThan,
-    LessEqual,
-
-    Comma,
-}
-
-impl std::fmt::Display for BinaryOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Plus => write!(f, "+"),
-            Self::Minus => write!(f, "-"),
-            Self::Star => write!(f, "*"),
-            Self::Slash => write!(f, "/"),
-            Self::BangEqual => write!(f, "!="),
-            Self::DoubleEquals => write!(f, "=="),
-            Self::GreaterThan => write!(f, ">"),
-            Self::GreaterEqual => write!(f, ">="),
-            Self::LessThan => write!(f, "<"),
-            Self::LessEqual => write!(f, "<="),
-            Self::Comma => write!(f, ","),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum UnaryOperator {
-    Minus,
-    Bang,
-}
-
-impl std::fmt::Display for UnaryOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Minus => write!(f, "-"),
-            Self::Bang => write!(f, "!"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Literal {
-    LitStr(Rc<str>),
-    LitNum(f64),
-    LitBool(bool),
-    LitNil,
-}
-
-impl std::fmt::Display for Literal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::LitStr(string) => write!(f, r#""{string}""#),
-            Self::LitNum(num) => write!(f, "{num}"),
-            Self::LitBool(true) => write!(f, "true"),
-            Self::LitBool(false) => write!(f, "false"),
-            Self::LitNil => write!(f, "nil"),
-        }
-    }
+    Variable {
+        line: usize,
+        column: usize,
+        identifier: Rc<str>,
+    },
+    Assignment {
+        line: usize,
+        column: usize,
+        identifier: Rc<str>,
+        value: Box<Expression>,
+    },
+    AnonymousFunction {
+        parameters: Rc<[Rc<str>]>,
+        body: Rc<[Statement]>,
+    },
+    Call {
+        line: usize,
+        column: usize,
+        callee: Box<Expression>,
+        args: Box<[Expression]>,
+    },
 }
 
 impl std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TernaryExpression {
+            Self::Ternary {
                 condition,
                 truthy,
-                falsy,
-            } => write!(f, "(ternary {condition} {truthy} {falsy})"),
-            Self::BinaryExpression {
+                falsey,
+            } => write!(f, "(ternary {condition} {truthy} {falsey})"),
+            Self::Binary {
                 left,
                 right,
                 operator,
-            } => write!(f, "({operator} {left} {right})"),
-            Self::UnaryExpression {
+            } => write!(f, "({} {left} {right})", operator.kind),
+            Self::Logical {
+                left,
+                right,
+                operator,
+            } => write!(f, "({} {left} {right})", operator.kind),
+            Self::Unary {
                 expression,
                 operator,
-            } => write!(f, "({operator} {expression})"),
+            } => write!(f, "({} {expression})", operator.kind),
             Self::GroupingExpression(expression) => write!(f, "(group {expression})"),
             Self::Literal(literal) => write!(f, "{literal}"),
+            Self::Variable { identifier, .. } => write!(f, "(ident {identifier})"),
+            Self::Assignment {
+                identifier, value, ..
+            } => write!(f, "(assign {identifier} {value})"),
+            Self::Call { callee, args, .. } => {
+                if args.is_empty() {
+                    write!(f, "(call {callee})")
+                } else {
+                    write!(f, "(call {callee} (args ")?;
+
+                    for arg in args.iter().take(args.len() - 1) {
+                        write!(f, "{arg} ")?;
+                    }
+
+                    write!(f, "{}))", args.last().unwrap())
+                }
+            }
+            Self::AnonymousFunction { .. } => write!(f, "<anonymous fn>"),
         }
     }
-}
-
-#[test]
-fn test() {
-    let expr = Expression::BinaryExpression {
-        left: Expression::Literal(Literal::LitNum(2.0)).into(),
-        right: Expression::Literal(Literal::LitNum(5.0)).into(),
-        operator: BinaryOperator::Plus,
-    };
-
-    assert_eq!(expr.to_string(), "(+ 2 5)")
 }

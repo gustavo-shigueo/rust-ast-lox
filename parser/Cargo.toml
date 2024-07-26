@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+thiserror = "1"
 lexer = { path = "../lexer", version = "0.1" }
 lox_core = { path = "../core", version = "0.1" }
