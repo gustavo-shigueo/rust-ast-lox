@@ -1,12 +1,12 @@
-use clap::Parser;
+use clap::Parser as Clap;
 use color_eyre::Result;
-use parser::Parser as LoxParser;
 use std::{io::Write, path::Path};
 
+use interpreter::Interpreter;
 use lexer::Lexer;
-use lox_core::report;
+use parser::Parser;
 
-#[derive(Parser)]
+#[derive(Clap)]
 struct Args {
     #[arg(short, long)]
     pub source: Option<Box<Path>>,
@@ -25,11 +25,16 @@ fn main() -> Result<()> {
 
 fn run_file(path: &Path) -> Result<()> {
     let source = std::fs::read_to_string(path)?;
-    run(&source);
+
+    let mut interpreter = Interpreter::new();
+
+    run(&mut interpreter, &source)?;
     Ok(())
 }
 
 fn run_prompt() -> Result<()> {
+    let mut interpreter = Interpreter::new();
+
     let mut stdout = std::io::stdout();
     let stdin = std::io::stdin();
     let mut buffer = String::new();
@@ -44,30 +49,18 @@ fn run_prompt() -> Result<()> {
             return Ok(());
         }
 
-        run(&buffer);
+        _ = run(&mut interpreter, &buffer);
     }
 }
 
-fn run(source: &str) {
-    let mut lexer = Lexer::new(source);
-    let output: Vec<_> = lexer.scan();
+fn run(interpreter: &mut Interpreter, source: &str) -> Result<()> {
+    let lexer = Lexer::new(source);
+    let tokens = lexer.scan();
 
-    if lexer.had_errors() {
-        for item in output.iter() {
-            match item {
-                Err(ref error) => report(source, error),
-                Ok(_) => continue,
-            }
-        }
+    let mut parser = Parser::new(source, &tokens);
+    let ast = parser.parse();
 
-        return;
-    }
+    interpreter.interpret(source, &ast);
 
-    let tokens: Vec<_> = output.into_iter().filter_map(|x| x.ok()).collect();
-
-    let mut parser = LoxParser::new(source, &tokens);
-    match parser.parse() {
-        Ok(ast) => println!("{}", dbg!(ast)),
-        Err(ref error) => report(source, error),
-    }
+    Ok(())
 }
