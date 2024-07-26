@@ -1,34 +1,17 @@
-use thiserror::Error as ErrorTrait;
+use std::error::Error as ErrorTrait;
+use thiserror::Error as ThisError;
 
-#[derive(Debug, ErrorTrait)]
-pub struct Error {
+#[derive(Debug, ThisError)]
+pub struct Error<E: ErrorTrait> {
     pub line: usize,
     pub column: usize,
 
     #[source]
-    pub source: ErrorType,
+    pub source: E,
 }
 
-impl std::fmt::Display for Error {
+impl<E: ErrorTrait> std::fmt::Display for Error<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)
     }
-}
-
-#[derive(Debug, ErrorTrait)]
-pub enum ErrorType {
-    #[error("Unterminated string")]
-    UnterminatedString,
-
-    #[error(r#"Unexpected character "{0}""#)]
-    UnexpectedCharacter(char),
-
-    #[error(r#"Expected ")" after expression"#)]
-    UnclosedParen,
-
-    #[error("Expected expression")]
-    ExpectedExpression,
-
-    #[error(r#"Expected ":" in ternary expression"#)]
-    UnterminatedTernary,
 }

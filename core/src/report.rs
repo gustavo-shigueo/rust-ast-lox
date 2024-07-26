@@ -1,5 +1,6 @@
 use crate::Error;
 use color_eyre::owo_colors::OwoColorize;
+use std::error::Error as ErrorTrait;
 
 /// How many lines before and after the line containing the error
 /// should be displayed
@@ -7,7 +8,7 @@ const LINE_PADDING: usize = 2;
 
 const SEPARATOR: &str = " | ";
 
-pub fn report(source: &str, error: &Error) {
+pub fn report<E: ErrorTrait>(source: &str, error: &Error<E>) {
     let line = error.line + 1;
     let column = error.column + 1;
 
@@ -38,10 +39,11 @@ pub fn report(source: &str, error: &Error) {
         eprint!("{}", line_indicator.blue().bold());
 
         if i == usize::min(line - 1, LINE_PADDING) {
-            eprintln!("{code}");
+            eprintln!("{}", code.red());
             eprintln!(
-                "{}^--- Here",
-                " ".repeat(SEPARATOR.len() + align + column - 1)
+                "{}{}",
+                " ".repeat(SEPARATOR.len() + align + column - 1),
+                "^--- Here".yellow(),
             );
         } else {
             eprintln!("{code}");

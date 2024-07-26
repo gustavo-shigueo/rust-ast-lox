@@ -1,7 +1,7 @@
-pub mod error;
-pub mod report;
+mod error;
+mod report;
 
-pub use error::{Error, ErrorType};
+pub use error::Error;
 pub use report::report;
 
-pub type Result<T, E = Error> = core::result::Result<T, E>;
+pub type Result<T, E> = core::result::Result<T, Error<E>>;
