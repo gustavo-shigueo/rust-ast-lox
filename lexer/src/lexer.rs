@@ -1,7 +1,7 @@
 use std::{iter::Peekable, str::Bytes};
 
-use crate::token::{Token, TokenKind};
-use lox_core::{Error, ErrorType, Result};
+use crate::{LexerError, Token, TokenKind};
+use lox_core::{report, Error, Result};
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
@@ -13,8 +13,6 @@ pub struct Lexer<'a> {
 
     current: usize,
     lexeme_start: usize,
-
-    had_errors: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -27,41 +25,39 @@ impl<'a> Lexer<'a> {
             column: 0,
             current: 0,
             lexeme_start: 0,
-            had_errors: false,
         }
     }
 
     #[must_use]
-    pub const fn had_errors(self) -> bool {
-        self.had_errors
-    }
-
-    pub fn scan(&mut self) -> Vec<Result<Token>> {
+    pub fn scan(mut self) -> Vec<Token> {
         let mut output = vec![];
+        let mut has_error = false;
 
         while self.peek().is_some() {
             self.lexeme_start = self.current;
 
             output.push(match self.scan_token() {
-                Ok(Some(token)) => Ok(token),
-                Ok(None) => continue,
-                Err(error) => {
-                    self.had_errors = true;
-                    Err(error)
+                Ok(Some(token)) if !has_error => token,
+                Ok(_) => continue,
+                Err(err) => {
+                    report(self.source, &err);
+                    output.clear();
+                    has_error = true;
+                    continue;
                 }
             });
         }
 
-        output.push(Ok(Token {
+        output.push(Token {
             line: self.line,
             column: self.column,
             kind: TokenKind::Eof,
-        }));
+        });
 
         output
     }
 
-    fn scan_token(&mut self) -> Result<Option<Token>> {
+    fn scan_token(&mut self) -> Result<Option<Token>, LexerError> {
         let character = self.next();
 
         Ok(Some(match character {
@@ -133,11 +129,10 @@ impl<'a> Lexer<'a> {
                 return Ok(None);
             }
             x => {
-                self.had_errors = true;
                 return Err(Error {
                     line: self.line,
                     column: self.column - 1,
-                    source: ErrorType::UnexpectedCharacter(x.into()),
+                    source: LexerError::UnexpectedCharacter(x.into()),
                 });
             }
         }))
@@ -189,7 +184,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_string_literal(&mut self) -> Result<Token> {
+    fn scan_string_literal(&mut self) -> Result<Token, LexerError> {
         let line = self.line;
         let column = self.column - 1;
 
@@ -208,11 +203,10 @@ impl<'a> Lexer<'a> {
 
         // Hit EOF without terminating string
         if self.peek().is_none() {
-            self.had_errors = true;
             return Err(Error {
                 line,
                 column,
-                source: ErrorType::UnterminatedString,
+                source: LexerError::UnterminatedString,
             });
         }
 
@@ -231,7 +225,7 @@ impl<'a> Lexer<'a> {
         let line = self.line;
         let column = self.column - 1;
 
-        while let Some(b'0'..=b'9') = self.peek() {
+        while let Some(b'0'..=b'9' | b'_') = self.peek() {
             self.next();
         }
 
@@ -241,7 +235,7 @@ impl<'a> Lexer<'a> {
         if has_fractional_part {
             self.next();
 
-            while let Some(b'0'..=b'9') = self.peek() {
+            while let Some(b'0'..=b'9' | b'_') = self.peek() {
                 self.next();
             }
         }
@@ -251,6 +245,7 @@ impl<'a> Lexer<'a> {
             column,
             kind: TokenKind::Number {
                 value: self.source[self.lexeme_start..self.current]
+                    .replace('_', "")
                     .parse()
                     .expect("Invalid numeric literal"),
                 lexeme: self.source[self.lexeme_start..self.current].into(),
@@ -276,13 +271,14 @@ impl<'a> Lexer<'a> {
                 "else" => TokenKind::Else,
                 "for" => TokenKind::For,
                 "while" => TokenKind::While,
+                "break" => TokenKind::Break,
+                "continue" => TokenKind::Continue,
                 "var" => TokenKind::Var,
                 "fun" => TokenKind::Fun,
                 "return" => TokenKind::Return,
                 "class" => TokenKind::Class,
                 "this" => TokenKind::This,
                 "super" => TokenKind::Super,
-                "print" => TokenKind::Print,
                 "nil" => TokenKind::Nil,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,

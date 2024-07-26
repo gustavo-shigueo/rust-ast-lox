@@ -65,6 +65,8 @@ pub enum TokenKind {
     Else,
     For,
     While,
+    Break,
+    Continue,
 
     Fun,
     Return,
@@ -73,7 +75,6 @@ pub enum TokenKind {
     Super,
     This,
 
-    Print,
     Nil,
     Var,
 
@@ -81,45 +82,48 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        matches!(self, Self::Eof)
+    }
+
+    #[must_use]
     pub fn len(&self) -> usize {
         match self {
-            TokenKind::Identifier(ref x) => x.len(),
-            TokenKind::String(ref x) => x.len() + 2,
-            TokenKind::Number { ref lexeme, .. } => lexeme.len(),
-            TokenKind::LeftParen
-            | TokenKind::RightParen
-            | TokenKind::LeftBracket
-            | TokenKind::RightBracket
-            | TokenKind::LeftCurly
-            | TokenKind::RightCurly
-            | TokenKind::Comma
-            | TokenKind::Dot
-            | TokenKind::Semicolon
-            | TokenKind::QuestionMark
-            | TokenKind::Colon
-            | TokenKind::Plus
-            | TokenKind::Minus
-            | TokenKind::Slash
-            | TokenKind::Star
-            | TokenKind::Bang
-            | TokenKind::GreaterThan
-            | TokenKind::LessThan
-            | TokenKind::Equals => 1,
-            TokenKind::BangEqual
-            | TokenKind::GreaterEqual
-            | TokenKind::LessEqual
-            | TokenKind::DoubleEquals
-            | TokenKind::If
-            | TokenKind::Or => 2,
-            TokenKind::And | TokenKind::Fun | TokenKind::Nil | TokenKind::Var | TokenKind::For => 3,
-            TokenKind::True | TokenKind::This | TokenKind::Else => 4,
-            TokenKind::False
-            | TokenKind::While
-            | TokenKind::Class
-            | TokenKind::Super
-            | TokenKind::Print => 5,
-            TokenKind::Return => 6,
-            TokenKind::Eof => 0,
+            Self::Identifier(ref x) => x.len(),
+            Self::String(ref x) => x.len() + 2,
+            Self::Number { ref lexeme, .. } => lexeme.len(),
+            Self::LeftParen
+            | Self::RightParen
+            | Self::LeftBracket
+            | Self::RightBracket
+            | Self::LeftCurly
+            | Self::RightCurly
+            | Self::Comma
+            | Self::Dot
+            | Self::Semicolon
+            | Self::QuestionMark
+            | Self::Colon
+            | Self::Plus
+            | Self::Minus
+            | Self::Slash
+            | Self::Star
+            | Self::Bang
+            | Self::GreaterThan
+            | Self::LessThan
+            | Self::Equals => 1,
+            Self::BangEqual
+            | Self::GreaterEqual
+            | Self::LessEqual
+            | Self::DoubleEquals
+            | Self::If
+            | Self::Or => 2,
+            Self::And | Self::Fun | Self::Nil | Self::Var | Self::For => 3,
+            Self::True | Self::This | Self::Else => 4,
+            Self::Break | Self::False | Self::While | Self::Class | Self::Super => 5,
+            Self::Return => 6,
+            Self::Continue => 8,
+            Self::Eof => 0,
         }
     }
 }
@@ -161,12 +165,13 @@ impl std::fmt::Display for TokenKind {
             Self::Else => write!(f, "else"),
             Self::For => write!(f, "for"),
             Self::While => write!(f, "while"),
+            Self::Break => write!(f, "break"),
+            Self::Continue => write!(f, "continue"),
             Self::Fun => write!(f, "fun"),
             Self::Return => write!(f, "return"),
             Self::Class => write!(f, "class"),
             Self::Super => write!(f, "super"),
             Self::This => write!(f, "this"),
-            Self::Print => write!(f, "print"),
             Self::Nil => write!(f, "nil"),
             Self::Var => write!(f, "var"),
             Self::Eof => write!(f, "EOF"),
