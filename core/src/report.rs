@@ -34,7 +34,7 @@ pub fn report<E: ErrorTrait>(source: &str, error: &Error<E>) {
         // than or equal to 10 - `LINE_PADDING`
         + usize::saturating_sub(line % 10, 9 - LINE_PADDING).min(1);
 
-    for (i, code) in chunk.enumerate() {
+    for (i, code) in chunk.enumerate().skip_while(|(_, code)| code.is_empty()) {
         let line_indicator = format!("{:align$}{SEPARATOR}", offset + i + 1);
         eprint!("{}", line_indicator.blue().bold());
 

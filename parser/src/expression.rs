@@ -24,15 +24,9 @@ pub enum Expression {
     },
     GroupingExpression(Box<Expression>),
     Literal(Literal),
-    Variable {
-        line: usize,
-        column: usize,
-        identifier: Rc<str>,
-    },
+    Variable(Reference),
     Assignment {
-        line: usize,
-        column: usize,
-        identifier: Rc<str>,
+        reference: Reference,
         value: Box<Expression>,
     },
     AnonymousFunction {
@@ -45,6 +39,35 @@ pub enum Expression {
         callee: Box<Expression>,
         args: Box<[Expression]>,
     },
+    Get {
+        line: usize,
+        column: usize,
+        object: Box<Expression>,
+        identifier: Rc<str>,
+    },
+    Set {
+        line: usize,
+        column: usize,
+        object: Box<Expression>,
+        identifier: Rc<str>,
+        value: Box<Expression>,
+    },
+    This {
+        line: usize,
+        column: usize,
+    },
+    Super {
+        line: usize,
+        column: usize,
+        method: Rc<str>,
+    },
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub struct Reference {
+    pub line: usize,
+    pub column: usize,
+    pub identifier: Rc<str>,
 }
 
 impl std::fmt::Display for Expression {
@@ -71,9 +94,10 @@ impl std::fmt::Display for Expression {
             } => write!(f, "({} {expression})", operator.kind),
             Self::GroupingExpression(expression) => write!(f, "(group {expression})"),
             Self::Literal(literal) => write!(f, "{literal}"),
-            Self::Variable { identifier, .. } => write!(f, "(ident {identifier})"),
+            Self::Variable(Reference { identifier, .. }) => write!(f, "(ident {identifier})"),
             Self::Assignment {
-                identifier, value, ..
+                reference: Reference { identifier, .. },
+                value,
             } => write!(f, "(assign {identifier} {value})"),
             Self::Call { callee, args, .. } => {
                 if args.is_empty() {
@@ -89,6 +113,17 @@ impl std::fmt::Display for Expression {
                 }
             }
             Self::AnonymousFunction { .. } => write!(f, "<anonymous fn>"),
+            Self::Get {
+                object, identifier, ..
+            } => write!(f, "(get {object} {identifier})"),
+            Self::Set {
+                object,
+                identifier,
+                value,
+                ..
+            } => write!(f, "(set {object} {identifier} {value})"),
+            Self::This { .. } => write!(f, "(ident this)"),
+            Self::Super { method, .. } => write!(f, "(super {method})"),
         }
     }
 }

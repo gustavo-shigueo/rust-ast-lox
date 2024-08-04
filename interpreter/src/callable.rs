@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{Environment, Value};
 use parser::Statement;
@@ -31,7 +31,9 @@ pub enum CallableKind {
         parameters: Rc<[Rc<str>]>,
         body: Rc<[Statement]>,
         closure: Rc<RefCell<Environment>>,
+        is_initializer: bool,
     },
+    LoxClass(LoxClass),
 }
 
 impl std::fmt::Debug for CallableKind {
@@ -45,6 +47,7 @@ impl std::fmt::Debug for CallableKind {
             Self::LoxFunction {
                 identifier: None, ..
             } => write!(f, "<anonymous fn>"),
+            Self::LoxClass(LoxClass { identifier, .. }) => write!(f, "<class {identifier}>"),
         }
     }
 }
@@ -73,5 +76,26 @@ impl PartialEq for CallableKind {
             }
             _ => false,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct LoxClass {
+    pub identifier: Rc<str>,
+    pub methods: HashMap<Rc<str>, Callable>,
+    pub super_class: Option<Rc<LoxClass>>,
+}
+
+impl LoxClass {
+    pub fn find_method(&self, identifier: &Rc<str>) -> Option<Callable> {
+        if let Some(method) = self.methods.get(identifier) {
+            return Some(method.clone());
+        }
+
+        if let Some(ref super_class) = self.super_class {
+            return super_class.find_method(identifier);
+        }
+
+        None
     }
 }

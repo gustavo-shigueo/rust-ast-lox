@@ -1,0 +1,25 @@
+class Foo {
+  teste() {
+    print("mundo");
+  }
+}
+
+class Bar < Foo {
+  teste() {
+    print("ola");
+    super.teste();
+  }
+}
+
+var foo = Bar();
+foo.teste();
+
+
+fun adder(x) {
+  return fun(y) {
+    return x + y;
+  };
+}
+
+var addTwo = adder(2);
+print(addTwo(4));

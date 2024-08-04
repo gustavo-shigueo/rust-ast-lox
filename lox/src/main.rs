@@ -5,6 +5,7 @@ use std::{io::Write, path::Path};
 use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
+use resolver::Resolver;
 
 #[derive(Clap)]
 struct Args {
@@ -60,7 +61,13 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<()> {
     let mut parser = Parser::new(source, &tokens);
     let ast = parser.parse();
 
-    interpreter.interpret(source, &ast);
+    let mut resolver = Resolver::new(source);
+    resolver.resolve(&ast);
+
+    if !resolver.had_error {
+        interpreter.resolve_locals(resolver.locals);
+        interpreter.interpret(source, &ast);
+    }
 
     Ok(())
 }

@@ -39,4 +39,7 @@ pub enum ParserError {
 
     #[error("Function cannot have more than {MAX_NUMBER_OF_ARGUMENTS} arguments")]
     ArgumentLimitExceeded,
+
+    #[error(r#"The "super" keyword must be followed by a dot"#)]
+    ExpectedDotAfterSuper,
 }

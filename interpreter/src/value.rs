@@ -1,16 +1,17 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use parser::Literal;
 
-use crate::Callable;
+use crate::{Callable, LoxInstance};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Value {
     String(Rc<str>),
     Number(f64),
     Boolean(bool),
     Nil,
     Callable(Callable),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 
 impl From<Literal> for Value {
@@ -33,6 +34,7 @@ impl Value {
             Self::Boolean(_) => "boolean",
             Self::Nil => "nil",
             Self::Callable(_) => "function",
+            Self::Instance(_) => "object",
         }
     }
 
@@ -53,6 +55,26 @@ impl std::fmt::Display for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Nil => write!(f, "nil"),
             Self::Callable(function) => write!(f, "{function}"),
+            Self::Instance(instance) => write!(f, "{}", instance.borrow()),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::Boolean(a), Self::Boolean(b)) => a == b,
+            (Self::Nil, Self::Nil) => true,
+            (Self::Callable(a), Self::Callable(b)) => a == b,
+            (Self::Instance(a), Self::Instance(b)) => {
+                let a = a.as_ref() as *const _;
+                let b = b.as_ref() as *const _;
+
+                a == b
+            }
+            _ => false,
         }
     }
 }

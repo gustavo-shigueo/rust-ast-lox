@@ -9,7 +9,7 @@ mod parser;
 mod statement;
 
 pub use error::{ParserError, MAX_NUMBER_OF_ARGUMENTS};
-pub use expression::Expression;
+pub use expression::{Expression, Reference};
 pub use literal::Literal;
 pub use operator::{
     binary_operator::{BinaryOperator, BinaryOperatorKind},
@@ -17,4 +17,4 @@ pub use operator::{
     unary_operator::{UnaryOperator, UnaryOperatorKind},
 };
 pub use parser::Parser;
-pub use statement::Statement;
+pub use statement::{Function, Statement};

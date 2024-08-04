@@ -29,14 +29,26 @@ pub enum Statement {
         line: usize,
         column: usize,
     },
-    Function {
-        identifier: Rc<str>,
-        parameters: Rc<[Rc<str>]>,
-        body: Rc<[Statement]>,
-    },
+    Function(Function),
     Return {
         line: usize,
         column: usize,
         expression: Option<Expression>,
     },
+    Class {
+        line: usize,
+        column: usize,
+        identifier: Rc<str>,
+        super_class: Option<Expression>,
+        methods: Rc<[Function]>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub line: usize,
+    pub column: usize,
+    pub identifier: Rc<str>,
+    pub parameters: Rc<[Rc<str>]>,
+    pub body: Rc<[Statement]>,
 }

@@ -4,8 +4,9 @@ use lexer::{Token, TokenKind};
 use lox_core::{report, Error, Result};
 
 use crate::{
-    BinaryOperator, BinaryOperatorKind, Expression, Literal, LogicalOperator, LogicalOperatorKind,
-    ParserError, Statement, UnaryOperator, UnaryOperatorKind, MAX_NUMBER_OF_ARGUMENTS,
+    BinaryOperator, BinaryOperatorKind, Expression, Function, Literal, LogicalOperator,
+    LogicalOperatorKind, ParserError, Reference, Statement, UnaryOperator, UnaryOperatorKind,
+    MAX_NUMBER_OF_ARGUMENTS,
 };
 
 macro_rules! match_token {
@@ -180,12 +181,18 @@ impl<'a> Parser<'a> {
         statements
     }
 
-    /// `declaration` -> `var_declaration` | `function_declaration` | `statement`
+    /// `declaration` ->
+    ///     | `var_declaration`
+    ///     | `function_declaration`
+    ///     | `statement`
+    ///     | `class_declaration`
     fn declaration(&mut self) -> Result<Statement, ParserError> {
         if match_token!(self, TokenKind::Var) {
             self.var_declaration()
         } else if match_token!(self, TokenKind::Fun) {
             self.function_declaration()
+        } else if match_token!(self, TokenKind::Class) {
+            self.class_declaration()
         } else {
             self.statement()
         }
@@ -233,11 +240,70 @@ impl<'a> Parser<'a> {
 
     /// `function_declaration` -> "fun" `named_function`
     fn function_declaration(&mut self) -> Result<Statement, ParserError> {
-        self.named_function()
+        self.named_function(false)
+    }
+
+    /// `class_declaration` -> "class" `IDENTIFIER` ( "<" `IDENTIFIER` )? "{" function* "}"
+    fn class_declaration(&mut self) -> Result<Statement, ParserError> {
+        let token = self.previous().clone();
+
+        let TokenKind::Identifier(identifier) = self.peek().kind.clone() else {
+            error!(self, ParserError::ExpectedIdentifier);
+        };
+
+        self.next();
+
+        let super_class = match_token!(self, TokenKind::LessThan)
+            .then(|| {
+                let TokenKind::Identifier(identifier) = self.peek().kind.clone() else {
+                    error!(self, ParserError::ExpectedIdentifier);
+                };
+
+                self.next();
+
+                let token = self.previous().clone();
+
+                Ok(Expression::Variable(Reference {
+                    line: token.line,
+                    column: token.column,
+                    identifier,
+                }))
+            })
+            .transpose()?;
+
+        if !match_token!(self, TokenKind::LeftCurly) {
+            error!(self, ParserError::ExpectedLeftCurly);
+        }
+
+        let mut methods = vec![];
+        while !self.is_done() && !match_token!(peek: self, TokenKind::RightCurly) {
+            methods.push(match self.named_function(true)? {
+                Statement::Function(function) => function,
+                _ => unreachable!(),
+            });
+        }
+
+        if !match_token!(self, TokenKind::RightCurly) {
+            error!(self, ParserError::ExpectedRightCurly);
+        }
+
+        Ok(Statement::Class {
+            line: token.line,
+            column: token.column,
+            identifier,
+            super_class,
+            methods: methods.into(),
+        })
     }
 
     /// `named_function` -> `IDENTIFIER` `anonymous_function`
-    fn named_function(&mut self) -> Result<Statement, ParserError> {
+    fn named_function(&mut self, is_method: bool) -> Result<Statement, ParserError> {
+        let token = if is_method {
+            self.peek().clone()
+        } else {
+            self.previous().clone()
+        };
+
         let TokenKind::Identifier(identifier) = self.peek().kind.clone() else {
             error!(self, ParserError::ExpectedIdentifier);
         };
@@ -248,11 +314,13 @@ impl<'a> Parser<'a> {
             unreachable!()
         };
 
-        Ok(Statement::Function {
+        Ok(Statement::Function(Function {
+            line: token.line,
+            column: token.column,
             identifier,
             parameters,
             body,
-        })
+        }))
     }
 
     /// `anonymous_function` -> "("  `parameters`? ")" `block`
@@ -549,28 +617,29 @@ impl<'a> Parser<'a> {
         self.comma()
     }
 
-    /// `assignment` -> `IDENTIFIER` "=" `assignment` | `ternary`
+    /// `assignment` -> (call ".")? `IDENTIFIER` "=" `assignment` | `ternary`
     fn assignment(&mut self) -> Result<Expression, ParserError> {
         let mut expression = self.ternary()?;
 
         if match_token!(self, TokenKind::Equals) {
             let value = self.assignment()?.into();
 
-            expression = if let Expression::Variable {
-                line,
-                column,
-                identifier,
-            } = expression
-            {
-                Expression::Assignment {
+            expression = match expression {
+                Expression::Variable(reference) => Expression::Assignment { reference, value },
+                Expression::Get {
+                    object,
+                    identifier,
                     line,
                     column,
+                } => Expression::Set {
+                    object,
                     identifier,
                     value,
-                }
-            } else {
-                error!(self, ParserError::InvalidAssignmentTarget);
-            }
+                    line,
+                    column,
+                },
+                _ => error!(self, ParserError::InvalidAssignmentTarget),
+            };
         }
 
         Ok(expression)
@@ -675,25 +744,38 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// `call` -> `primary` ( "(" `arguments` ")" )*
+    /// `call` -> `primary` ( "(" `arguments` ")" | "." `IDENTIFIER` )*
     fn call(&mut self) -> Result<Expression, ParserError> {
         let mut expression = self.primary()?;
 
         loop {
-            if !match_token!(self, TokenKind::LeftParen) {
+            if match_token!(self, TokenKind::LeftParen) {
+                let token = self.previous();
+                expression = Expression::Call {
+                    line: token.line,
+                    column: token.column,
+                    callee: expression.into(),
+                    args: self.arguments()?,
+                };
+
+                if !match_token!(self, TokenKind::RightParen) {
+                    error!(self, ParserError::ExpectedRightParen);
+                }
+            } else if match_token!(self, TokenKind::Dot) {
+                let TokenKind::Identifier(identifier) = self.peek().kind.clone() else {
+                    error!(self, ParserError::ExpectedIdentifier);
+                };
+
+                let token = self.next();
+
+                expression = Expression::Get {
+                    line: token.line,
+                    column: token.column,
+                    object: expression.into(),
+                    identifier,
+                }
+            } else {
                 break;
-            }
-
-            let token = self.previous();
-            expression = Expression::Call {
-                line: token.line,
-                column: token.column,
-                callee: expression.into(),
-                args: self.arguments()?,
-            };
-
-            if !match_token!(self, TokenKind::RightParen) {
-                error!(self, ParserError::ExpectedRightParen);
             }
         }
 
@@ -750,16 +832,44 @@ impl<'a> Parser<'a> {
     ///     | "nil"
     ///     | "(" `expression` ")"
     ///     | "fun" `anonymous_function`
+    ///     | "super" "." `IDENTIFIER`
     fn primary(&mut self) -> Result<Expression, ParserError> {
         if match_token!(self, TokenKind::Identifier(_)) {
             let token = self.previous();
-            return Ok(Expression::Variable {
+            return Ok(Expression::Variable(Reference {
                 line: token.line,
                 column: token.column,
                 identifier: match token.kind {
                     TokenKind::Identifier(ref ident) => Rc::clone(ident),
                     _ => unreachable!(),
                 },
+            }));
+        }
+
+        if match_token!(self, TokenKind::This) {
+            let token = self.previous();
+            return Ok(Expression::This {
+                line: token.line,
+                column: token.column,
+            });
+        }
+
+        if match_token!(self, TokenKind::Super) {
+            let token = self.previous().clone();
+            if !match_token!(self, TokenKind::Dot) {
+                error!(self, ParserError::ExpectedDotAfterSuper);
+            }
+
+            let TokenKind::Identifier(identifier) = self.peek().kind.clone() else {
+                error!(self, ParserError::ExpectedIdentifier);
+            };
+
+            self.next();
+
+            return Ok(Expression::Super {
+                line: token.line,
+                column: token.column,
+                method: identifier,
             });
         }
 
@@ -787,13 +897,7 @@ impl<'a> Parser<'a> {
             let expression = self.expression()?.into();
 
             if !match_token!(self, TokenKind::RightParen) {
-                let token = self.previous();
-
-                return Err(Error {
-                    line: token.line,
-                    column: token.column + token.len(),
-                    source: ParserError::ExpectedRightParen,
-                });
+                error!(self, ParserError::ExpectedRightParen);
             }
 
             return Ok(Expression::GroupingExpression(expression));
@@ -831,7 +935,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn peek(&mut self) -> &Token {
+    const fn peek(&self) -> &Token {
         &self.tokens[self.current]
     }
 
@@ -847,7 +951,7 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1]
     }
 
-    fn is_done(&mut self) -> bool {
+    fn is_done(&self) -> bool {
         self.peek().kind == TokenKind::Eof
     }
 }

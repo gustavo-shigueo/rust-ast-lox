@@ -1,5 +1,6 @@
 use crate::{RuntimeError, Value};
 use lox_core::{Error, Result};
+use parser::Reference;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, Default)]
@@ -10,7 +11,7 @@ pub struct Environment {
 
 #[derive(Debug, Clone)]
 enum State {
-    Undefined,
+    Undeclared,
     Unassigned,
     Assigned(Value),
 }
@@ -45,26 +46,17 @@ impl Environment {
     ///
     /// # Errors
     /// This function will error if no variable is found with the given `name`
-    pub fn assign(
-        &mut self,
-        name: &Rc<str>,
-        value: Value,
-        line: usize,
-        column: usize,
-    ) -> Result<(), RuntimeError> {
-        if self.values.contains_key(name) {
-            self.values.insert(Rc::clone(name), State::Assigned(value));
+    pub fn assign(&mut self, reference: &Reference, value: Value) -> Result<(), RuntimeError> {
+        if self.values.contains_key(&reference.identifier) {
+            self.values
+                .insert(Rc::clone(&reference.identifier), State::Assigned(value));
             return Ok(());
         }
 
-        if let Some(ref parent) = self.parent {
-            return parent.borrow_mut().assign(name, value, line, column);
-        }
-
         Err(Error {
-            line,
-            column,
-            source: RuntimeError::UndefinedVariable(name.to_string()),
+            line: reference.line,
+            column: reference.column,
+            source: RuntimeError::UndeclaredVariable(Rc::clone(&reference.identifier)),
         })
     }
 
@@ -72,31 +64,104 @@ impl Environment {
     ///
     /// # Errors
     /// This function will error if no variable is found with the given `name`
-    pub fn lookup(
-        &self,
-        name: &Rc<str>,
-        line: usize,
-        column: usize,
-    ) -> Result<Value, RuntimeError> {
-        let state = self.values.get(name).cloned().unwrap_or(State::Undefined);
+    pub fn lookup(&self, reference: &Reference) -> Result<Value, RuntimeError> {
+        let state = self
+            .values
+            .get(&reference.identifier)
+            .cloned()
+            .unwrap_or(State::Undeclared);
 
         match state {
             State::Assigned(value) => Ok(value),
             State::Unassigned => Err(Error {
-                line,
-                column,
-                source: RuntimeError::UnassignedVariable(name.to_string()),
+                line: reference.line,
+                column: reference.column,
+                source: RuntimeError::UnassignedVariable(Rc::clone(&reference.identifier)),
             }),
-            State::Undefined => self.parent.as_ref().map_or_else(
-                || {
-                    Err(Error {
-                        line,
-                        column,
-                        source: RuntimeError::UndefinedVariable(name.to_string()),
-                    })
-                },
-                |x| x.borrow().lookup(name, line, column),
-            ),
+            State::Undeclared => Err(Error {
+                line: reference.line,
+                column: reference.column,
+                source: RuntimeError::UndeclaredVariable(Rc::clone(&reference.identifier)),
+            }),
         }
+    }
+
+    /// Returns the value of an existing variable at a specific enclosing scope
+    ///
+    /// # Errors
+    /// This function will error if no variable is found with the given `name`
+    pub fn lookup_at(&self, distance: usize, reference: &Reference) -> Result<Value, RuntimeError> {
+        let state = match distance {
+            0 => self.values[&reference.identifier].clone(),
+            _ => self.ancestor(distance).borrow().values[&reference.identifier].clone(),
+        };
+
+        match state {
+            State::Assigned(value) => Ok(value),
+            State::Unassigned => Err(Error {
+                line: reference.line,
+                column: reference.column,
+                source: RuntimeError::UnassignedVariable(Rc::clone(&reference.identifier)),
+            }),
+            State::Undeclared => unreachable!(),
+        }
+    }
+
+    /// Overrides the value of an existing variable at a specific enclosing scope
+    ///
+    /// # Errors
+    /// This function will error if no variable is found with the given `name`
+    pub fn assign_at(
+        &mut self,
+        distance: usize,
+        reference: &Reference,
+        value: Value,
+    ) -> Result<(), RuntimeError> {
+        if distance == 0 {
+            let values = &mut self.values;
+
+            if values.contains_key(&reference.identifier) {
+                values.insert(Rc::clone(&reference.identifier), State::Assigned(value));
+
+                Ok(())
+            } else {
+                Err(Error {
+                    line: reference.line,
+                    column: reference.column,
+                    source: RuntimeError::UndeclaredVariable(Rc::clone(&reference.identifier)),
+                })
+            }
+        } else {
+            let ancestor = self.ancestor(distance);
+
+            let values = &mut ancestor.borrow_mut().values;
+            if values.contains_key(&reference.identifier) {
+                values.insert(Rc::clone(&reference.identifier), State::Assigned(value));
+
+                Ok(())
+            } else {
+                Err(Error {
+                    line: reference.line,
+                    column: reference.column,
+                    source: RuntimeError::UndeclaredVariable(Rc::clone(&reference.identifier)),
+                })
+            }
+        }
+    }
+
+    fn ancestor(&self, distance: usize) -> Rc<RefCell<Self>> {
+        assert_ne!(distance, 0);
+        let mut current = self.parent.clone();
+
+        for _ in 1..distance {
+            current = current.map_or_else(
+                // This method will only be called with guaranteed certainty
+                // that a valid environment will be found
+                || unreachable!(),
+                |curr| curr.borrow().parent.clone(),
+            );
+        }
+
+        current.unwrap()
     }
 }
