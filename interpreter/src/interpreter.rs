@@ -111,6 +111,36 @@ impl Interpreter {
                     self.execute(else_branch)?;
                 }
             }
+            Statement::For {
+                condition,
+                increment,
+                body: statement,
+            } => {
+                while self.evaluate(condition)?.is_truthy() {
+                    match self.execute(statement) {
+                        Ok(()) => {
+                            if let Some(ref increment) = increment {
+                                self.evaluate(increment)?;
+                            }
+                        }
+                        Err(Error {
+                            source: RuntimeError::Break,
+                            ..
+                        }) => break,
+                        Err(Error {
+                            source: RuntimeError::Continue,
+                            ..
+                        }) => {
+                            if let Some(ref increment) = increment {
+                                self.evaluate(increment)?;
+                            }
+
+                            continue;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
             Statement::While {
                 condition,
                 body: statement,

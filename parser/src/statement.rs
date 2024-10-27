@@ -17,6 +17,11 @@ pub enum Statement {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
+    For {
+        condition: Expression,
+        increment: Option<Expression>,
+        body: Box<Statement>,
+    },
     While {
         condition: Expression,
         body: Box<Statement>,

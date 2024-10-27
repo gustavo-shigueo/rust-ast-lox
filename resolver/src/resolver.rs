@@ -93,8 +93,26 @@ impl<'a> Resolver<'a> {
                     self.resolve_statement(else_branch)?;
                 }
             }
+            Statement::For {
+                condition,
+                body,
+                increment,
+            } => {
+                let is_in_loop = self.is_in_loop;
+                self.is_in_loop = true;
+
+                self.resolve_expression(condition)?;
+                self.resolve_statement(body)?;
+
+                if let Some(ref increment) = increment {
+                    self.resolve_expression(increment)?;
+                }
+
+                self.is_in_loop = is_in_loop;
+            }
             Statement::While { condition, body } => {
                 let is_in_loop = self.is_in_loop;
+                self.is_in_loop = true;
 
                 self.resolve_expression(condition)?;
                 self.resolve_statement(body)?;

@@ -518,11 +518,8 @@ impl<'a> Parser<'a> {
 
         let mut stmt = self.statement()?;
 
-        if let Some(increment) = increment {
-            stmt = Statement::Block([stmt, Statement::Expression(increment)].into());
-        }
-
-        stmt = Statement::While {
+        stmt = Statement::For {
+            increment,
             condition,
             body: stmt.into(),
         };
