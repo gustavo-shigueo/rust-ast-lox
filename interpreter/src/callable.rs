@@ -87,6 +87,7 @@ pub struct LoxClass {
 }
 
 impl LoxClass {
+    #[must_use]
     pub fn find_method(&self, identifier: &Rc<str>) -> Option<Callable> {
         if let Some(method) = self.methods.get(identifier) {
             return Some(method.clone());

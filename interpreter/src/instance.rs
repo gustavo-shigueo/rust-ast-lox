@@ -10,6 +10,9 @@ pub struct LoxInstance {
 }
 
 impl LoxInstance {
+    /// # Errors
+    ///
+    /// This function errors if the property doesn't exist
     pub fn get(
         instance: &Rc<RefCell<Self>>,
         identifier: &Rc<str>,

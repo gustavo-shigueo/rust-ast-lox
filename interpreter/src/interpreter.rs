@@ -58,7 +58,7 @@ impl Interpreter {
                     let mut buffer = String::new();
                     _ = stdin.read_line(&mut buffer);
 
-                    Value::String(buffer.trim_end_matches(&['\r', '\n']).into())
+                    Value::String(buffer.trim_end_matches(['\r', '\n']).into())
                 })),
             })),
         );
@@ -85,6 +85,7 @@ impl Interpreter {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn execute(&mut self, statement: &Statement) -> Result<(), RuntimeError> {
         match statement {
             Statement::Expression(expression) => {
@@ -222,7 +223,7 @@ impl Interpreter {
                             arity: 0,
                             kind: CallableKind::LoxClass(super_class.as_ref().clone()),
                         })),
-                    )
+                    );
                 }
 
                 for method in methods.iter() {
@@ -242,7 +243,7 @@ impl Interpreter {
                 }
 
                 let class = Value::Callable(Callable {
-                    arity: methods_map.get("init".into()).map_or(0, |x| x.arity),
+                    arity: methods_map.get("init").map_or(0, |x| x.arity),
                     kind: CallableKind::LoxClass(LoxClass {
                         identifier: Rc::clone(identifier),
                         super_class,
@@ -278,6 +279,7 @@ impl Interpreter {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn evaluate(&mut self, expression: &Expression) -> Result<Value, RuntimeError> {
         Ok(match expression {
             Expression::Ternary {
@@ -383,7 +385,7 @@ impl Interpreter {
 
                 match object {
                     Value::Instance(ref mut instance) => {
-                        instance.borrow_mut().set(identifier, value.clone())
+                        instance.borrow_mut().set(identifier, value.clone());
                     }
                     x => {
                         return Err(Error {
@@ -693,7 +695,7 @@ impl Interpreter {
         })
     }
 
-    fn lookup_variable(&mut self, reference: &Reference) -> Result<Value, RuntimeError> {
+    fn lookup_variable(&self, reference: &Reference) -> Result<Value, RuntimeError> {
         if let Some(&distance) = self.locals.get(reference) {
             self.environment.borrow().lookup_at(distance, reference)
         } else {
@@ -769,7 +771,7 @@ impl Interpreter {
                                         column: 0,
                                     };
 
-                                    return Ok(closure.borrow().lookup_at(0, &reference)?);
+                                    return closure.borrow().lookup_at(0, &reference);
                                 }
                                 RuntimeError::Return(value) => return Ok(value),
                                 _ => return Err(error),
@@ -793,7 +795,7 @@ impl Interpreter {
                 }
             }
             CallableKind::LoxClass(class) => {
-                let initializer = class.methods.get("init".into()).cloned();
+                let initializer = class.methods.get("init").cloned();
                 let instance = Rc::new(RefCell::new(LoxInstance {
                     class,
                     fields: HashMap::new(),
